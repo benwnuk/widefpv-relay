@@ -1,10 +1,13 @@
 {
   "name": "widefpv-relay",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "rtmp-relay.js",
   "license": "MIT",
   "dependencies": {
     "express": "^4.17.1",
     "ffmpeg-static": "^4.4.0"
+  },
+  "engines": {
+    "node": "15.6"
   }
 }
