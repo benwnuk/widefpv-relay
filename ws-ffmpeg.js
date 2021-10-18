@@ -128,7 +128,7 @@ function bindWsToFFMPEG (wss, ffmpegPath = 'ffmpeg') {
       }
 
       ffmpeg = childProcess.spawn(ffmpegPath, [
-        //  '-hide_banner',
+        '-hide_banner',
         '-stats_period', '1',
         '-f', 'lavfi', '-i', 'anullsrc',
         '-thread_queue_size', '512',
