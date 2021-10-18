@@ -8,7 +8,7 @@ const bindWsToFFMPEG = require('../rtmp/ws-ffmpeg.js')
 const app = express()
 const server = http.createServer(app).listen(process.env.PORT || 4001)
 
-app.use(express.static(path.join(__dirname, '../dist')))
+app.use(express.static(path.join(__dirname, 'site')))
 
 const wss = new WebSocketServer({ server })
 
