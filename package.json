@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "main": "rtmp-relay.js",
   "license": "MIT",
+  "scripts": {
+    "start": "node ./rtmp-relay.js"
+  },
   "dependencies": {
     "express": "^4.17.1",
-    "ffmpeg-static": "^4.4.0"
+    "ffmpeg-static": "^4.4.0",
+    "ws": "^8.2.3"
   },
   "engines": {
     "node": "15.6"

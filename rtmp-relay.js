@@ -3,7 +3,7 @@ const path = require('path')
 const express = require('express')
 const WebSocketServer = require('ws').Server
 const ffmpeg = require('ffmpeg-static')
-const bindWsToFFMPEG = require('../rtmp/ws-ffmpeg.js')
+const bindWsToFFMPEG = require('./ws-ffmpeg.js')
 
 const app = express()
 const server = http.createServer(app).listen(process.env.PORT || 4001)
