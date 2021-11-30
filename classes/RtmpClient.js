@@ -10,6 +10,8 @@ if (process.env.USE_FFMPEG_STATIC) {
   ffmpegPath = 'ffmpeg'
 }
 
+const AUDIO_PRE_GATE = 20000
+
 const streamRegex = /Stream #0:0/i
 const frameRegex = /frame=\s*(\d+) fps=\s*(\S+) q=-1.0 size=\s*(\d+)kB time=(\d+):(\d+):(\d+).(\d+) bitrate=\s*(\S+)kbits\/s speed=\s*(\S+)x/gm
 const ioErrorRegex = /Error in the pull function/i
@@ -43,24 +45,26 @@ module.exports = class FFMPEG extends WideEvent {
     clearInterval(t.loop)
     const stacks = [s.video, s.audio]
 
+    const testStack = (stack, timestamp) => {
+      if (stack.length && stack[0].timestamp <= timestamp) {
+        return stack.shift()
+      }
+      return false
+    }
+
     t.startTime
     const onLoop = () => {
       const elapsed = Math.floor((performance.now() - t.startTime) * 1000)
       const gateTimestamp = t.startTimestamp + elapsed - 2e6
       // console.log(elapsed, gateTimestamp)
       if (!this.stopped) {
-        stacks.forEach((stack) => {
-          const isAudio = stack === s.audio
-          if (stack.length && stack[0].timestamp <= gateTimestamp) {
-            const entry = stack.shift()
-            if (isAudio) {
-              const pcm = this.opus.decode(entry.data)
-              p.stdio[4].write(pcm)
-            } else {
-              p.stdio[3].write(entry.data)
-            }
-          }
-        })
+        const vEntry = testStack(s.video, gateTimestamp)
+        vEntry && p.stdio[3].write(vEntry.data)
+        const aEntry = testStack(s.audio, gateTimestamp + AUDIO_PRE_GATE)
+        if (aEntry) {
+          const pcm = this.opus.decode(aEntry.data)
+          p.stdio[4].write(pcm)
+        }
       }
     }
     t.loop = setInterval(onLoop, 4)

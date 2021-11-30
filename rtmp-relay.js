@@ -12,5 +12,5 @@ app.use(express.static(path.join(__dirname, 'site')))
 
 const wss = new WebSocketServer({ server })
 wideServer(wss)
-// bindWsToFFMPEG(wss)
+
 console.log(`ffmpeg socket service started, port: ${port}`)
