@@ -16,12 +16,20 @@ function bindWsToFFMPEG(wss) {
         let socketReady = true
         const client = new RtmpClient(query.rtmp, query.fps)
 
-        let timeoutMS = Date.now() + toMS
-        const onStartTimeout = () => {
-          socketReady && ws.send('stopped,no activity')
+        const send = (msg) => {
+          socketReady && ws.send(msg)
+        }
+
+        const sendAndClose = (msg) => {
+          send('stopped,no activity')
           setTimeout(() => {
             socketReady && ws.close()
           }, 50)
+        }
+
+        let timeoutMS = Date.now() + toMS
+        const onStartTimeout = () => {
+          sendAndClose('stopped,no activity')
         }
         let startTimeout = setTimeout(onStartTimeout, toMS)
         const clearStartTimeout = () => {
@@ -30,19 +38,18 @@ function bindWsToFFMPEG(wss) {
         }
 
         const socketStop = () => {
-          console.log('socketStop')
-          socketReady = false
-          ws.terminate()
-          clearStartTimeout()
+          if (socketReady) {
+            console.log('socketStop')
+            socketReady = false
+            ws.terminate()
+            clearStartTimeout()
+          }
         }
 
         const checkTimeout = () => {
           const now = Date.now()
           const timedOut = timeoutMS < now
-          if (timedOut && socketReady) {
-            ws.send('stopped,no activity')
-            socketReady && setTimeout(socketStop, 50)
-          }
+          timedOut && sendAndClose('stopped,no activity')
         }
 
         ws.on('message', (msg) => {
@@ -59,15 +66,15 @@ function bindWsToFFMPEG(wss) {
 
         client.$on('update', (data) => {
           checkTimeout()
-          socketReady && ws.send(data)
+          send(data)
         })
         client.$on('error', (msg) => {
-          ws.send(`error,${msg}`)
+          send(`error,${msg}`)
         })
         client.$on('ready', (state) => {
           console.log('onReady?', state, socketReady)
-          if (state) {
-            socketReady && ws.send('ready')
+          if (state && socketReady) {
+            send('ready')
           } else {
             socketStop()
           }
