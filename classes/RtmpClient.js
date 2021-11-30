@@ -89,7 +89,7 @@ module.exports = class FFMPEG extends WideEvent {
       -f s16le -ar 48000 -ac 2
       -i pipe:4
       -c:v copy
-      -c:a libfdk_aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
+      -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
       -f flv
       -map 0:v -map 1:a
       -queue_size 60
