@@ -10,14 +10,14 @@ module.exports = class WideEvent {
     this.echo = echo
   }
 
-  $on(evt, cb) {
-    const $on = (e) => {
+  on(evt, cb) {
+    const on = (e) => {
       this[eSym][e] ? this[eSym][e].push(cb) : this[eSym][e] = [cb]
     }
-    cb && (Array.isArray(evt) ? evt.forEach(e => $on(e)) : $on(evt))
+    cb && (Array.isArray(evt) ? evt.forEach(e => on(e)) : on(evt))
   }
 
-  $off(evt, cb) {
+  off(evt, cb) {
     const $off = (e) => {
       const es = this[eSym][e]
       if (es && es.includes(cb)) { es[es.indexOf(cb)] = null }
@@ -30,20 +30,20 @@ module.exports = class WideEvent {
     }
   }
 
-  $emitUpdate(oldObj, newObj, prefix) {
+  emitUpdate(oldObj, newObj, prefix) {
     let anyUpdate = false
     Object.keys(newObj).forEach((key) => {
       if (oldObj[key] !== newObj[key]) {
         oldObj[key] = newObj[key]
-        this.$emit(`${key}`, newObj[key])
+        this.emit(`${key}`, newObj[key])
         anyUpdate = true
       }
     })
-    prefix && anyUpdate && this.$emit(prefix, newObj)
+    prefix && anyUpdate && this.emit(prefix, newObj)
     return anyUpdate
   }
 
-  $emit(evt, data) {
+  emit(evt, data) {
     const e = this[eSym][evt]
     this.echo && console.log(this.constructor.name, evt, data)
     if (e) {

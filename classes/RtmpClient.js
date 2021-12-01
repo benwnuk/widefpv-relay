@@ -1,31 +1,26 @@
-const WideEvent = require('../classes/WideEvent.js')
-const PeercastUnpacker = require('../classes/PeercastUnpacker')
+const WideEvent = require('./WideEvent.js')
+const PeercastUnpacker = require('./PeercastUnpacker')
 const childProcess = require('child_process') // To be used later for running FFmpeg
 const { performance } = require('perf_hooks');
 const { OpusEncoder } = require('@discordjs/opus');
-let ffmpegPath
-if (process.env.USE_FFMPEG_STATIC) {
-  ffmpegPath = require('ffmpeg-static')
-} else {
-  ffmpegPath = 'ffmpeg'
-}
 
+const TIMESTAMP_DELAY = 3e6
 const AUDIO_PRE_GATE = 20000
 
 const streamRegex = /Stream #0:0/i
 const frameRegex = /frame=\s*(\d+) fps=\s*(\S+) q=-1.0 size=\s*(\d+)kB time=(\d+):(\d+):(\d+).(\d+) bitrate=\s*(\S+)kbits\/s speed=\s*(\S+)x/gm
 const ioErrorRegex = /Error in the pull function/i
 
-module.exports = class FFMPEG extends WideEvent {
-  constructor(url, framerate) {
+module.exports = class RtmpClient extends WideEvent {
+  constructor(rtmpUrl, ffmpegPath) {
     super()
+    this.ffmpegPath = ffmpegPath
     this.unpacker = new PeercastUnpacker()
     this.opus = new OpusEncoder(48000, 2)
     this.ready = false
     this.stopped = false
     this.error = false
-    this.rtmpUrl = url
-    this.framerate = framerate
+    this.rtmpUrl = rtmpUrl
     this.stacks = {
       video: [],
       audio: []
@@ -43,8 +38,6 @@ module.exports = class FFMPEG extends WideEvent {
     const s = this.stacks
     const p = this.process
     clearInterval(t.loop)
-    const stacks = [s.video, s.audio]
-
     const testStack = (stack, timestamp) => {
       if (stack.length && stack[0].timestamp <= timestamp) {
         return stack.shift()
@@ -52,10 +45,9 @@ module.exports = class FFMPEG extends WideEvent {
       return false
     }
 
-    t.startTime
     const onLoop = () => {
       const elapsed = Math.floor((performance.now() - t.startTime) * 1000)
-      const gateTimestamp = t.startTimestamp + elapsed - 2e6
+      const gateTimestamp = t.startTimestamp + elapsed - TIMESTAMP_DELAY
       // console.log(elapsed, gateTimestamp)
       if (!this.stopped) {
         const vEntry = testStack(s.video, gateTimestamp)
@@ -81,14 +73,14 @@ module.exports = class FFMPEG extends WideEvent {
   }
 
   start () {
-    const p = this.process = childProcess.spawn(ffmpegPath, 
+    const p = this.process = childProcess.spawn(this.ffmpegPath, 
       this.formatParams(`
       -fflags +genpts
       -stats_period 1
       -hide_banner
       -thread_queue_size 128
       -use_wallclock_as_timestamps 1
-      -r ${this.framerate}
+      -r 60
       -i pipe:3
       -f s16le -ar 48000 -ac 2
       -i pipe:4
@@ -106,14 +98,12 @@ module.exports = class FFMPEG extends WideEvent {
     }) // stdin, stdout, stderr, video, audio
 
     p.on('exit', (code) => {
-      this.$emitUpdate(this, { error: 'ffmpeg exit' })
-      this.stop()
+      this.doError('ffmpeg exit' )
     })
 
     p.stdin.on('error', (err) => {
       console.log(err)
-      this.$emitUpdate(this, { error: 'stream error' })
-      this.stop()
+      this.doError('stream error' )
     })
 
     p.stderr.on('data', (resp) => {
@@ -152,24 +142,30 @@ module.exports = class FFMPEG extends WideEvent {
     const val = pos => parseFloat(data[pos])
     if (!this.ready) {
       setTimeout(() => {
-        !this.stopped && this.$emitUpdate(this, { ready: true })
+        !this.stopped && this.emitUpdate(this, { ready: true })
       }, 1000)
     }
     if (data.length) {
       out.push('live')
-      out.push(val(1))
-      out.push(val(2))
-      out.push(val(3))
-      out.push((val(4) * 3600) + (val(5) * 60) + (val(6)))
-      out.push(val(8))
-      out.push(val(9))
-      this.$emit('update', out.join(','))
+      out.push(val(1)) // frame num
+      out.push(val(2)) // fps
+      out.push(val(3)) // size
+      out.push((val(4) * 3600) + (val(5) * 60) + (val(6))) // time
+      out.push(val(8)) // bitrate
+      out.push(val(9)) // speed
+      const s = this.stacks
+      out.push(s.video.length + s.audio.length) // stack size
+      this.emit('update', out.join(','))
     } else if (resp.match(streamRegex) && !this.ready) {
-      this.$emitUpdate(this, { ready: true })
+      this.emitUpdate(this, { ready: true })
     } else if (resp.match(ioErrorRegex)) {
-      this.$emitUpdate(this, { error: 'stream error' })
-      this.stop()
+      this.doError('stream error' )
     }
+  }
+
+  doError (msg) {
+    this.emitUpdate(this, { error: msg })
+    this.stop()
   }
 
   stop() {
@@ -177,7 +173,7 @@ module.exports = class FFMPEG extends WideEvent {
     if (!this.stopped) {
       const p = this.process
       console.log('ffmpeg stop')
-      this.$emitUpdate(this, { ready: false, stopped: true })
+      this.emitUpdate(this, { ready: false, stopped: true })
       try {
         p.stdio[3].destroy()
         p.stdio[4].destroy()
@@ -187,6 +183,7 @@ module.exports = class FFMPEG extends WideEvent {
       } catch (err) {
         console.log('stop err?', err)
       }
+      this.off()
     }
   }
 }
