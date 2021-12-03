@@ -114,7 +114,6 @@ module.exports = class RtmpClient extends WideEvent {
 
   feed (msg) {
     const t = this.timing
-    // this.process && this.process.stdin.write(Uint8Array.from(msg))
     const payload = this.unpacker.unpack(Uint8Array.from(msg).buffer) 
     payload.chunks.forEach((chunk) => {
       this.stacks[chunk.medium].push(chunk)
@@ -175,11 +174,11 @@ module.exports = class RtmpClient extends WideEvent {
       console.log('ffmpeg stop')
       this.emitUpdate(this, { ready: false, stopped: true })
       try {
-        p.stdio[3].destroy()
-        p.stdio[4].destroy()
         setTimeout(() => {
           p.kill('SIGINT')
-        }, 1000)
+        }, 2000)
+        p.stdio[3].destroy()
+        p.stdio[4].destroy()
       } catch (err) {
         console.log('stop err?', err)
       }
