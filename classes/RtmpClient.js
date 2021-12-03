@@ -4,7 +4,7 @@ const childProcess = require('child_process') // To be used later for running FF
 const { performance } = require('perf_hooks');
 const { OpusEncoder } = require('@discordjs/opus');
 
-const TIMESTAMP_DELAY = 3e6
+const TIMESTAMP_DELAY = 4e6
 const AUDIO_PRE_GATE = 20000
 
 const streamRegex = /Stream #0:0/i
@@ -28,7 +28,8 @@ module.exports = class RtmpClient extends WideEvent {
     this.timing = {
       startTime: 0,
       startTimestamp: 0,
-      loop: false
+      loop: false,
+      timeoutTime: false
     }
     this.process = false
   }
@@ -46,16 +47,21 @@ module.exports = class RtmpClient extends WideEvent {
     }
 
     const onLoop = () => {
+      const t = this.timing
       const elapsed = Math.floor((performance.now() - t.startTime) * 1000)
       const gateTimestamp = t.startTimestamp + elapsed - TIMESTAMP_DELAY
       // console.log(elapsed, gateTimestamp)
       if (!this.stopped) {
-        const vEntry = testStack(s.video, gateTimestamp)
-        vEntry && p.stdio[3].write(vEntry.data)
-        const aEntry = testStack(s.audio, gateTimestamp + AUDIO_PRE_GATE)
-        if (aEntry) {
-          const pcm = this.opus.decode(aEntry.data)
-          p.stdio[4].write(pcm)
+        if (t.timeoutTime < performance.now()) {
+          this.stop()
+        } else {
+          const vEntry = testStack(s.video, gateTimestamp)
+          vEntry && p.stdio[3].write(vEntry.data)
+          const aEntry = testStack(s.audio, gateTimestamp + AUDIO_PRE_GATE)
+          if (aEntry) {
+            const pcm = this.opus.decode(aEntry.data)
+            p.stdio[4].write(pcm)
+          }
         }
       }
     }
@@ -78,11 +84,12 @@ module.exports = class RtmpClient extends WideEvent {
       -fflags +genpts
       -stats_period 1
       -hide_banner
-      -thread_queue_size 128
       -use_wallclock_as_timestamps 1
       -r 60
+      -thread_queue_size 256
       -i pipe:3
       -f s16le -ar 48000 -ac 2
+      -thread_queue_size 256
       -i pipe:4
       -c:v copy
       -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
@@ -116,6 +123,7 @@ module.exports = class RtmpClient extends WideEvent {
     const t = this.timing
     const payload = this.unpacker.unpack(Uint8Array.from(msg).buffer) 
     payload.chunks.forEach((chunk) => {
+      t.timeoutTime = performance.now() + 10000
       this.stacks[chunk.medium].push(chunk)
       if (t.startTime === 0 && !this.stopped) {
         t.startTime = performance.now()

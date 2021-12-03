@@ -30,30 +30,31 @@ app.get("/", (req, res) => { res.send(indexHtml) })
 const timeoutMinutes = 0.5
 const toMS = timeoutMinutes * 60000
 
+const sessions = {}
+
 wss.on('connection', (ws, req) => {
   const query = qs.parse(req.url.split('?').pop())
   if (query.rtmp) {
     try {
       console.log(`RTMP: ${query.rtmp}`)
       let socketReady = true
-      const client = new RtmpClient(query.rtmp, ffmpegPath)
+      let client
+      let timeoutMS = Date.now() + toMS
+      const onStartTimeout = () => { sendAndClose('stopped,no activity') }
+      let startTimeout = setTimeout(onStartTimeout, toMS)
 
       const send = (msg) => {
+        // console.log('send:', msg)
         socketReady && ws.send(msg)
       }
 
       const sendAndClose = (msg) => {
-        send('stopped,no activity')
+        send(`stopped,${msg}`)
         setTimeout(() => {
           socketReady && ws.close()
         }, 50)
       }
 
-      let timeoutMS = Date.now() + toMS
-      const onStartTimeout = () => {
-        sendAndClose('stopped,no activity')
-      }
-      let startTimeout = setTimeout(onStartTimeout, toMS)
       const clearStartTimeout = () => {
         startTimeout && clearTimeout(startTimeout)
         startTimeout = false
@@ -74,6 +75,16 @@ wss.on('connection', (ws, req) => {
         timedOut && sendAndClose('stopped,no activity')
       }
 
+      if (sessions[query.rtmp]) {
+        console.log('continue session')
+        client = sessions[query.rtmp]
+        send('ready')
+      } else {
+        console.log('new session')
+        client = sessions[query.rtmp] = new RtmpClient(query.rtmp, ffmpegPath)
+        client.start()
+      }
+
       ws.on('message', (msg) => {
         client.ready && client.feed(msg)
         timeoutMS = Date.now() + toMS
@@ -83,25 +94,32 @@ wss.on('connection', (ws, req) => {
       ws.on('close', (e) => {
         console.log('Socket  has closed')
         socketStop()
-        client.stop()
+        // client.stop()
       })
 
       client.on('update', (data) => {
         checkTimeout()
         send(data)
       })
+
       client.on('error', (msg) => {
         send(`error,${msg}`)
       })
+
+      client.on('stopped', (stopped) => {
+        if (stopped) {
+          sendAndClose('Encoder stopped')
+          delete sessions[query.rtmp]
+        }
+      })
+
       client.on('ready', (state) => {
-        console.log('onReady?', state, socketReady)
         if (state && socketReady) {
           send('ready')
         } else {
           socketStop()
         }
       })
-      client.start()
     } catch (err) {
       console.log('i can haz error?', err)
     }
