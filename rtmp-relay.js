@@ -20,7 +20,7 @@ initFfmpegPath()
 const indexHtml = `
 <!doctype html><html><head>
 <meta charset="utf-8"><title>WideFPV Relay Host</title><style>
-html,body { width: 100%; height: 100%; }
+html,body { width: 100%; height: 100%; margin: 0; padding: 0; }
 body { background: black; color: white; display: flex; align-items: center; justify-content: center; }
 p { font-family: Arial, Helvetica, sans-serif; font-size: 24px; text-align: center; }
 </style></head><body><p>WideFPV<br> Relay Host</p></body></html>
