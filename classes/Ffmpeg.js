@@ -7,7 +7,6 @@ const { OpusEncoder } = require('@discordjs/opus')
 import WideEvent from './WideEvent.js'
 
 const MIN_STACK_START = 60
-
 const TIMESTAMP_DELAY = 2e6
 const AUDIO_PRE_GATE = 20000
 const DATA_TIMEOUT = 10000
@@ -97,7 +96,6 @@ export default class FFMPEG extends WideEvent {
     }
 
     p.on('exit', (code) => {
-      console.log('exit?', code)
       this.$emit('exit')
     })
 
@@ -161,11 +159,6 @@ export default class FFMPEG extends WideEvent {
     const s = this.stacks
     const p = this.process
     clearInterval(t.loop)
-    // console.log(this.stacks)
-    if (!s.video.length) {
-      // console.log('cant start with empty stack')
-      return false
-    }
     this.skip()
     t.startTime = performance.now()
     t.startTimestamp = s.video[0].timestamp
