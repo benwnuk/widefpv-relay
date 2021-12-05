@@ -5,6 +5,7 @@ import childProcess from 'child_process' // To be used later for running FFmpeg
 import { performance } from 'perf_hooks'
 const { OpusEncoder } = require('@discordjs/opus')
 import WideEvent from './WideEvent.js'
+import Blank1280 from './Blank1280.js'
 
 const MIN_STACK_START = 60
 const TIMESTAMP_DELAY = 2e6
@@ -76,7 +77,7 @@ export default class FFMPEG extends WideEvent {
     }
     const p = this.process = childProcess.spawn(this.ffmpegPath, 
       formatParams(`
-      -fflags +genpts -stats_period 1 -hide_banner -use_wallclock_as_timestamps 1 -r 60
+      -fflags +nobuffer+genpts -stats_period 1 -hide_banner -use_wallclock_as_timestamps 1 -r 60
       -thread_queue_size 256 -i pipe:3 -f s16le -ar 48000 -ac 2
       -thread_queue_size 256 -i pipe:4
       -c:v copy -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
@@ -102,14 +103,18 @@ export default class FFMPEG extends WideEvent {
     p.stdin.on('error', (err) => {
       onError('stream error', err)
     })
-
     p.stderr.on('data', (resp) => {
+      console.log(resp.toString())
       if (this.state !== 'stopped') {
         resp = parseStats(resp.toString())
         resp && resp[0] === 'update' && this.$emit('update', resp[1])
         resp && resp[0] === 'error' && onError(resp[1])
       }
     })
+    // setTimeout(() => {
+    //   p.stdio[3].write(new Uint8Array(Blank1280))
+    // }, 2000)
+    
   }
 
   skip () {
@@ -136,9 +141,6 @@ export default class FFMPEG extends WideEvent {
       this.gotVideoFrame = true
     } else if (this.gotVideoFrame) {
       this.stacks.audio.push(chunk)
-    }
-    if (this.gotVideoFrame && this.state === 'empty') {
-      this.$emitUpdate(this, { state: 'buffering'})
     }
     this.checkIfCanStart()
   }
@@ -171,16 +173,23 @@ export default class FFMPEG extends WideEvent {
     }
     const onLoop = () => {
       const t = this.timing
-      const elapsed = Math.floor((performance.now() - t.startTime) * 1000)
-      const gateTimestamp = t.startTimestamp + elapsed - TIMESTAMP_DELAY
-      // console.log(elapsed, gateTimestamp)
-      // console.log(s.video.length, s.audio.length)
       if (this.state === 'stopped') {
         clearInterval(t.loop)
       } else if (t.timeoutTime < performance.now()) {
         this.$emit('timeout')
         this.stop()
-      } else {
+      } else if (this.state === 'buffering' && s.video.length > MIN_STACK_START) {
+        this.$emitUpdate(this, { state: 'live' })
+        t.startTime = performance.now()
+        t.startTimestamp = s.video[0].timestamp
+      } else if (!s.video.length && !s.audio.length) {
+        this.$emitUpdate(this, { state: 'empty' })
+      } else if (this.state === 'empty' && s.video.length > 0) {
+        this.$emitUpdate(this, { state: 'buffering' })
+      }
+      if (this.state === 'live') {
+        const elapsed = Math.floor((performance.now() - t.startTime) * 1000)
+        const gateTimestamp = t.startTimestamp + elapsed - TIMESTAMP_DELAY
         const vEntry = testStack(s.video, gateTimestamp)
         vEntry && p.stdio[3].write(vEntry.data)
         const aEntry = testStack(s.audio, gateTimestamp + AUDIO_PRE_GATE)
@@ -188,14 +197,9 @@ export default class FFMPEG extends WideEvent {
           const pcm = Opus.decode(aEntry.data)
           p.stdio[4].write(pcm)
         }
-        if (vEntry || aEntry) {
-          this.$emitUpdate(this, { state: 'live' })
-        } else if (this.state === 'live' && !s.video.length && !s.audio.length) {
-          this.$emitUpdate(this, { state: 'empty' })
-        }
       }
     }
-    t.loop = setInterval(onLoop, 4)
+    t.loop = setInterval(onLoop, 6)
   }
 
   stop () {

@@ -42,6 +42,9 @@ export default class RtmpClient extends WideEvent {
         videoCodec: conf.videoCodec
       })) {
         console.log('unpacker update', this.conf)
+        // this.start()
+      }
+      if (!this.ffmpeg) {
         this.start()
       }
     })
