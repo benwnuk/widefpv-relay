@@ -103,4 +103,4 @@ wss.on('connection', (ws, req) => {
   }
 })
 
-console.log(`ffmpeg socket service started, port: ${port}`)
+console.log(`ffmpeg socket service started, port:  ${port}`)
