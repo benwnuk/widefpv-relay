@@ -4,7 +4,9 @@ import { WebSocketServer } from 'ws'
 import qs  from 'querystring'
 import { lookpath } from 'lookpath'
 import RtmpClient from './classes/RtmpClient.js'
+import { createRequire } from 'module'
 
+const require = createRequire(import.meta.url)
 const app = express()
 const port = process.env.PORT || 4003
 const server = http.createServer(app).listen(port)
