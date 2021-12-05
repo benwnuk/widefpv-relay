@@ -1,10 +1,10 @@
 {
   "name": "widefpv-relay",
   "version": "1.0.0",
-  "main": "rtmp-relay.js",
+  "main": "server.js",
   "license": "MIT",
   "scripts": {
-    "start": "node ./rtmp-relay.js"
+    "start": "node ./server.js"
   },
   "type" : "module",
   "dependencies": {
