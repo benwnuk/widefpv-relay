@@ -1,13 +1,15 @@
-const http = require('http')
-const express = require('express')
-const WebSocketServer = require('ws').Server
-const qs = require('querystring')
-const RtmpClient = require('./classes/RtmpClient.js')
+import http from 'http'
+import express  from 'express'
+import { WebSocketServer } from 'ws'
+import qs  from 'querystring'
+import { lookpath } from 'lookpath'
+import RtmpClient from './classes/RtmpClient.js'
+
 const app = express()
 const port = process.env.PORT || 4003
 const server = http.createServer(app).listen(port)
 const wss = new WebSocketServer({ server })
-const { lookpath } = require('lookpath')
+
 let ffmpegPath = 'ffmpeg'
 const initFfmpegPath = async () => {
   const inPath = await lookpath('ffmpeg')
@@ -27,9 +29,6 @@ p { font-family: Arial, Helvetica, sans-serif; font-size: 24px; text-align: cent
 `
 app.get("/", (req, res) => { res.send(indexHtml) })
 
-const timeoutMinutes = 0.5
-const toMS = timeoutMinutes * 60000
-
 const sessions = {}
 
 wss.on('connection', (ws, req) => {
@@ -39,9 +38,6 @@ wss.on('connection', (ws, req) => {
       console.log(`RTMP: ${query.rtmp}`)
       let socketReady = true
       let client
-      let timeoutMS = Date.now() + toMS
-      const onStartTimeout = () => { sendAndClose('stopped,no activity') }
-      let startTimeout = setTimeout(onStartTimeout, toMS)
 
       const send = (msg) => {
         // console.log('send:', msg)
@@ -50,14 +46,7 @@ wss.on('connection', (ws, req) => {
 
       const sendAndClose = (msg) => {
         send(`stopped,${msg}`)
-        setTimeout(() => {
-          socketReady && ws.close()
-        }, 50)
-      }
-
-      const clearStartTimeout = () => {
-        startTimeout && clearTimeout(startTimeout)
-        startTimeout = false
+        setTimeout(socketStop, 50)
       }
 
       const socketStop = () => {
@@ -65,61 +54,44 @@ wss.on('connection', (ws, req) => {
           console.log('socketStop')
           socketReady = false
           ws.terminate()
-          clearStartTimeout()
         }
-      }
-
-      const checkTimeout = () => {
-        const now = Date.now()
-        const timedOut = timeoutMS < now
-        timedOut && sendAndClose('stopped,no activity')
       }
 
       if (sessions[query.rtmp]) {
         console.log('continue session')
         client = sessions[query.rtmp]
-        send('ready')
       } else {
         console.log('new session')
         client = sessions[query.rtmp] = new RtmpClient(query.rtmp, ffmpegPath)
-        client.start()
       }
 
+      send('ready')
+
       ws.on('message', (msg) => {
-        client.ready && client.feed(msg)
-        timeoutMS = Date.now() + toMS
-        clearStartTimeout()
+        // console.log(msg)
+        client.feed(msg)
       })
 
       ws.on('close', (e) => {
         console.log('Socket  has closed')
         socketStop()
-        // client.stop()
       })
 
-      client.on('update', (data) => {
-        checkTimeout()
+      client.$on('update', (data) => {
         send(data)
       })
 
-      client.on('error', (msg) => {
+      client.$on('error', (msg) => {
         send(`error,${msg}`)
       })
 
-      client.on('stopped', (stopped) => {
+      client.$on('stopped', (stopped) => {
         if (stopped) {
           sendAndClose('Encoder stopped')
           delete sessions[query.rtmp]
         }
       })
 
-      client.on('ready', (state) => {
-        if (state && socketReady) {
-          send('ready')
-        } else {
-          socketStop()
-        }
-      })
     } catch (err) {
       console.log('i can haz error?', err)
     }

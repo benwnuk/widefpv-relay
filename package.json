@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node ./rtmp-relay.js"
   },
+  "type" : "module",
   "dependencies": {
     "@discordjs/opus": "^0.7.0",
     "express": "^4.17.1",
