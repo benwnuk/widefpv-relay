@@ -8,7 +8,7 @@ import WideEvent from './WideEvent.js'
 
 const MIN_STACK_START = 120
 const TIMESTAMP_DELAY = 3e6
-const AUDIO_PRE_GATE = 20000
+const AUDIO_PRE_GATE = 0
 const DATA_TIMEOUT = 7000
 
 // const streamRegex = /Stream #0:0/i
@@ -60,9 +60,9 @@ export default class FFMPEG extends WideEvent {
       // `),
       formatParams(`
       -stats_period 1 -hide_banner 
-      -fflags +genpts
       -use_wallclock_as_timestamps 1
       -thread_queue_size 512 -i pipe:3 -f s16le -ar 48000 -ac 2
+      -r 60
       -thread_queue_size 512 -i pipe:4
       -c:v copy -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
       -f flv -map 0:v -map 1:a 
@@ -156,7 +156,7 @@ export default class FFMPEG extends WideEvent {
     if (chunk.medium === 'video') {
       this.stacks.video.push(chunk)
       this.gotVideoFrame = true
-    } else if (this.gotVideoFrame) {
+    } else if (this.gotVideoFrame || true) {
       this.stacks.audio.push(chunk)
     }
     this.checkIfCanStart()
