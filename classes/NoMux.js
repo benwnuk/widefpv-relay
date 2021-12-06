@@ -9,7 +9,7 @@ const DefaultOpts = {
   audioNumberOfChannels: 2,
   audioCodec: 'opus',
   audioSampleRate: 48000,
-  videoCodec: 'avc1.420034',
+  videoCodec: 'avc1.640034',
   audioBitrate: 0.1e6,
   videoBitrate: 2e6,
   framerate: 60,

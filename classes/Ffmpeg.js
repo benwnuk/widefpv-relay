@@ -5,16 +5,15 @@ import childProcess from 'child_process' // To be used later for running FFmpeg
 import { performance } from 'perf_hooks'
 const { OpusEncoder } = require('@discordjs/opus')
 import WideEvent from './WideEvent.js'
-import Blank1280 from './Blank1280.js'
 
-const MIN_STACK_START = 60
-const TIMESTAMP_DELAY = 2e6
+const MIN_STACK_START = 120
+const TIMESTAMP_DELAY = 3e6
 const AUDIO_PRE_GATE = 20000
-const DATA_TIMEOUT = 10000
+const DATA_TIMEOUT = 7000
 
 // const streamRegex = /Stream #0:0/i
 const frameRegex = /frame=\s*(\d+) fps=\s*(\S+) q=-1.0 size=\s*(\d+)kB time=(\d+):(\d+):(\d+).(\d+) bitrate=\s*(\S+)kbits\/s speed=\s*(\S+)x/gm
-const ioErrorRegex = /Error in the pull function/i
+const ioErrorRegex = /Error in the pull function|failed to read/i
 
 const Opus = new OpusEncoder(48000, 2)
 
@@ -26,32 +25,6 @@ const formatParams = (str) => {
   resp = resp.map(val => val.trim())
   console.log(str)
   return resp
-}
-
-const parseStats = (resp) => {
-  // console.log('stats', resp)
-  const data = []
-  const out = []
-  let m
-  while ((m = frameRegex.exec(resp)) !== null) {
-    if (m.index === frameRegex.lastIndex) { frameRegex.lastIndex++ }
-    m.forEach((match, groupIndex) => data.push(match))
-  }
-  const val = pos => parseFloat(data[pos])
-  if (data.length) {
-    out.push('live')
-    out.push(val(1)) // frame num
-    out.push(val(2)) // fps
-    out.push(val(3)) // size
-    out.push((val(4) * 3600) + (val(5) * 60) + (val(6))) // time
-    out.push(val(8)) // bitrate
-    out.push(val(9)) // speed
-    return ['update', out.join(',')]
-  } else if (resp.match(ioErrorRegex)) {
-    return ['error', 'stream error']
-  } else {
-    return false
-  }
 }
 
 export default class FFMPEG extends WideEvent {
@@ -73,19 +46,34 @@ export default class FFMPEG extends WideEvent {
       startTime: 0,
       startTimestamp: 0,
       loop: false,
-      timeoutTime: 0
+      timeoutTime: 0,
+      gateTime: 0
     }
     const p = this.process = childProcess.spawn(this.ffmpegPath, 
+      // formatParams(`
+      // -fflags +nobuffer+genpts -stats_period 1 -hide_banner -use_wallclock_as_timestamps 1 -r 60
+      // -thread_queue_size 256 -i pipe:3 -f s16le -ar 48000 -ac 2
+      // -thread_queue_size 256 -i pipe:4
+      // -c:v copy -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
+      // -f flv -map 0:v -map 1:a -queue_size 60 -drop_pkts_on_overflow 0
+      // -attempt_recovery 1 -recovery_wait_time 1
+      // ${this.rtmpUrl}
+      // `),
       formatParams(`
-      -fflags +nobuffer+genpts -stats_period 1 -hide_banner -use_wallclock_as_timestamps 1 -r 60
-      -thread_queue_size 256 -i pipe:3 -f s16le -ar 48000 -ac 2
-      -thread_queue_size 256 -i pipe:4
+      -stats_period 1 -hide_banner 
+      -fflags +genpts
+      -use_wallclock_as_timestamps 1
+      -thread_queue_size 512 -i pipe:3 -f s16le -ar 48000 -ac 2
+      -thread_queue_size 512 -i pipe:4
       -c:v copy -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
-      -f flv -map 0:v -map 1:a -queue_size 60 -drop_pkts_on_overflow 0
-      -attempt_recovery 1 -recovery_wait_time 1
+      -f flv -map 0:v -map 1:a 
+      -queue_size 60 
+      -drop_pkts_on_overflow 0
+      -attempt_recovery 1 
+      -recovery_wait_time 1
       ${this.rtmpUrl}
       `),
-      { stdio: ['pipe', 'ignore', 'pipe', 'pipe', 'pipe'] 
+      { stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'] 
     }) // stdin, stdout, stderr, video, audio
 
     const onError = (msg, error) => {
@@ -97,24 +85,54 @@ export default class FFMPEG extends WideEvent {
     }
 
     p.on('exit', (code) => {
+      this.state = 'stopped'
       this.$emit('exit')
     })
 
-    p.stdin.on('error', (err) => {
+    p.on('error', (code) => {
       onError('stream error', err)
     })
+
+    p.stdout.on('error', (err) => {
+      onError('stream error', err)
+    })
+
     p.stderr.on('data', (resp) => {
       console.log(resp.toString())
       if (this.state !== 'stopped') {
-        resp = parseStats(resp.toString())
+        resp = this.parseStats(resp.toString())
         resp && resp[0] === 'update' && this.$emit('update', resp[1])
         resp && resp[0] === 'error' && onError(resp[1])
       }
     })
-    // setTimeout(() => {
-    //   p.stdio[3].write(new Uint8Array(Blank1280))
-    // }, 2000)
-    
+  }
+
+  parseStats (resp) {
+    // console.log('stats', resp)
+    const data = []
+    const out = []
+    let m
+    while ((m = frameRegex.exec(resp)) !== null) {
+      if (m.index === frameRegex.lastIndex) { frameRegex.lastIndex++ }
+      m.forEach((match, groupIndex) => data.push(match))
+    }
+    const val = pos => parseFloat(data[pos])
+    if (data.length) {
+      out.push(this.state)
+      out.push(val(1)) // frame num
+      out.push(val(2)) // fps
+      out.push(val(3)) // size
+      out.push((val(4) * 3600) + (val(5) * 60) + (val(6))) // time
+      out.push(val(8)) // bitrate
+      out.push(val(9)) // speed
+      out.push(this.stacks.video.length) // vStatck
+      out.push(this.stacks.audio.length) // aStack
+      return ['update', out.join(',')]
+    } else if (resp.match(ioErrorRegex)) {
+      return ['error', 'stream error']
+    } else {
+      return false
+    }
   }
 
   skip () {
@@ -161,15 +179,17 @@ export default class FFMPEG extends WideEvent {
     const s = this.stacks
     const p = this.process
     clearInterval(t.loop)
-    this.skip()
-    t.startTime = performance.now()
-    t.startTimestamp = s.video[0].timestamp
     this.$emitUpdate(this, { started: true })
     const testStack = (stack, timestamp) => {
-      if (stack.length && stack[0].timestamp <= timestamp) {
-        return stack.shift()
+      let frame = false
+      const test = () => {
+        if (stack.length && stack[0].timestamp <= timestamp) {
+          frame = stack.shift()
+          test()
+        }
       }
-      return false
+      test()
+      return frame
     }
     const onLoop = () => {
       const t = this.timing
@@ -180,6 +200,7 @@ export default class FFMPEG extends WideEvent {
         this.stop()
       } else if (this.state === 'buffering' && s.video.length > MIN_STACK_START) {
         this.$emitUpdate(this, { state: 'live' })
+        this.skip()
         t.startTime = performance.now()
         t.startTimestamp = s.video[0].timestamp
       } else if (!s.video.length && !s.audio.length) {
@@ -189,17 +210,19 @@ export default class FFMPEG extends WideEvent {
       }
       if (this.state === 'live') {
         const elapsed = Math.floor((performance.now() - t.startTime) * 1000)
-        const gateTimestamp = t.startTimestamp + elapsed - TIMESTAMP_DELAY
-        const vEntry = testStack(s.video, gateTimestamp)
-        vEntry && p.stdio[3].write(vEntry.data)
-        const aEntry = testStack(s.audio, gateTimestamp + AUDIO_PRE_GATE)
+        this.gateTime = t.startTimestamp + elapsed - TIMESTAMP_DELAY
+        const vEntry = testStack(s.video, this.gateTime)
+        if (vEntry) {
+          p.stdio[3].write(vEntry.data)
+        }
+        const aEntry = testStack(s.audio, this.gateTime + AUDIO_PRE_GATE)
         if (aEntry) {
           const pcm = Opus.decode(aEntry.data)
-          p.stdio[4].write(pcm)
+          this.state === 'live' && p.stdio[4].write(pcm)
         }
       }
     }
-    t.loop = setInterval(onLoop, 6)
+    t.loop = setInterval(onLoop, 4)
   }
 
   stop () {

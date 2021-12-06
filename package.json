@@ -6,9 +6,10 @@
   "scripts": {
     "start": "node ./server.js"
   },
-  "type" : "module",
+  "type": "module",
   "dependencies": {
     "@discordjs/opus": "^0.7.0",
+    "dotenv": "^10.0.0",
     "express": "^4.17.1",
     "ffmpeg-static": "^4.4.0",
     "lookpath": "^1.2.2",
