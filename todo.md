@@ -1,1 +1,1 @@
-- Nothing at the moment
+- Fix audio sync issues after reconnect
