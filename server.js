@@ -66,22 +66,23 @@ wss.on('connection', (ws, req) => {
       if (sessions[rtmp]) {
         console.log('continue session')
         client = sessions[rtmp]
+        client.$off()
       } else {
         console.log('new session')
         client = sessions[rtmp] = new RtmpClient(rtmp, ffmpegPath)
-        client.$on('update', (data) => {
-          send(data)
-        })
-        client.$on('error', (msg) => {
-          send(`error,${msg}`)
-        })
-        client.$on('stopped', (stopped) => {
-          if (stopped) {
-            sendAndClose('Encoder stopped')
-            delete sessions[rtmp]
-          }
-        })
       }
+      client.$on('update', (data) => {
+        send(data)
+      })
+      client.$on('error', (msg) => {
+        send(`error,${msg}`)
+      })
+      client.$on('stopped', (stopped) => {
+        if (stopped) {
+          sendAndClose('Encoder stopped')
+          delete sessions[rtmp]
+        }
+      })
     }
 
     ws.on('message', (msg) => {
