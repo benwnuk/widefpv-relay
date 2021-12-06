@@ -232,7 +232,7 @@ export default class FFMPEG extends WideEvent {
       try {
         setTimeout(() => {
           p.kill('SIGINT')
-        }, 500)
+        }, 1000)
         p.stdio[3].destroy()
         p.stdio[4].destroy()
       } catch (err) {
