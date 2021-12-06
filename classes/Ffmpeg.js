@@ -15,8 +15,6 @@ const DATA_TIMEOUT = 7000
 const frameRegex = /frame=\s*(\d+) fps=\s*(\S+) q=-1.0 size=\s*(\d+)kB time=(\d+):(\d+):(\d+).(\d+) bitrate=\s*(\S+)kbits\/s speed=\s*(\S+)x/gm
 const ioErrorRegex = /Error in the pull function|failed to read/i
 
-const Opus = new OpusEncoder(48000, 2)
-
 const formatParams = (str) => {
   let resp
   resp = str.trim().replace(/\r?\n|\r/g, '').replace(/\\S+/g, ' ')
@@ -31,6 +29,7 @@ export default class FFMPEG extends WideEvent {
   constructor (rtmpUrl, ffmpegPath) {
     super(true)
     this.ffmpegPath = ffmpegPath
+    this.opus = new OpusEncoder(48000, 2)
     this.rtmpUrl = rtmpUrl
     this.state = 'empty' // empty, buffering, live, stopped
     this.started = false
@@ -217,12 +216,12 @@ export default class FFMPEG extends WideEvent {
         }
         const aEntry = testStack(s.audio, this.gateTime + AUDIO_PRE_GATE)
         if (aEntry) {
-          const pcm = Opus.decode(aEntry.data)
+          const pcm = this.opus.decode(aEntry.data)
           this.state === 'live' && p.stdio[4].write(pcm)
         }
       }
     }
-    t.loop = setInterval(onLoop, 4)
+    t.loop = setInterval(onLoop, 8.333)
   }
 
   stop () {
