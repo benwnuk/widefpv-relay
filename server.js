@@ -88,6 +88,7 @@ wss.on('connection', (ws, req) => {
     ws.on('message', (msg) => {
       if (client) {
         client.feed(msg)
+        send(`ack,${msg.byteLength}`)
       } else {
         const hp = hostParams
         msg = msg.toString().split(',')

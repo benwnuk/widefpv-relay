@@ -23,18 +23,10 @@ export default class FFMPEG extends WideEvent {
     this.ffmpegPath = ffmpegPath
     this.rtmpUrl = rtmpUrl
     this.state = 'empty' // empty, buffering, live, stopped
+    this.lastFrameCount = 0
     this.started = false
     this.timeout = performance.now() + DATA_TIMEOUT
     const p = this.process = childProcess.spawn(this.ffmpegPath, 
-      // formatParams(`
-      // -fflags +nobuffer+genpts -stats_period 1 -hide_banner -use_wallclock_as_timestamps 1 -r 60
-      // -thread_queue_size 256 -i pipe:3 -f s16le -ar 48000 -ac 2
-      // -thread_queue_size 256 -i pipe:4
-      // -c:v copy -c:a aac -ar 48000 -ac 2 -b:a 96k -cutoff 18000
-      // -f flv -map 0:v -map 1:a -queue_size 60 -drop_pkts_on_overflow 0
-      // -attempt_recovery 1 -recovery_wait_time 1
-      // ${this.rtmpUrl}
-      // `),
       formatParams(`
       -stats_period 1 -hide_banner 
       -re
@@ -97,6 +89,8 @@ export default class FFMPEG extends WideEvent {
     }
     const val = pos => parseFloat(data[pos])
     if (data.length) {
+      const frameCount = val(1)
+      this.state = frameCount > this.lastFrameCount ? 'live' : 'stalled'
       out.push(this.state)
       out.push(val(1)) // frame num
       out.push(val(2)) // fps
